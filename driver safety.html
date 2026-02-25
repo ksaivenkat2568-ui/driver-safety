@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Safety & Vehicle Monitoring</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Arial, sans-serif; background:#0b1220; color:#e5e7eb; scroll-behavior:smooth; }
+
+    /* ---------- COMMON ---------- */
+    section { min-height:100vh; padding:40px 20px; }
+    h1,h2,h3 { margin-top:0; }
+    .card { background:#111827; padding:24px; border-radius:18px; box-shadow:0 15px 40px rgba(0,0,0,.45); }
+    button { border:none; border-radius:14px; padding:12px 18px; background:#2563eb; color:#fff; cursor:pointer; }
+    button.secondary { background:#1f2937; }
+    button.danger { background:#dc2626; }
+    input { width:100%; padding:12px; margin:10px 0; border-radius:12px; border:none; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; }
+    .green{color:#22c55e;} .yellow{color:#eab308;} .red{color:#ef4444;}
+
+    /* ---------- LOGIN SECTION ---------- */
+    #login { display:flex; align-items:center; justify-content:center; }
+    .login-box { width:340px; text-align:center; }
+
+    /* ---------- APP HEADER ---------- */
+    header { position:sticky; top:0; z-index:10; background:#020617; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; }
+
+    /* ---------- DASHBOARD ---------- */
+    #dashboard { display:grid; grid-template-columns:2fr 1fr; gap:20px; }
+    video { width:100%; border-radius:14px; background:#020617; }
+    .status { font-weight:bold; }
+    .icon { font-size:28px; }
+
+    .car-box { height:160px; background:#020617; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:52px; }
+
+    /* ---------- POPUP ---------- */
+    .overlay { position:fixed; inset:0; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; z-index:50; }
+    .popup { background:#020617; padding:32px; border-radius:22px; width:320px; text-align:center; box-shadow:0 0 50px rgba(239,68,68,.6); }
+    .popup .big { font-size:70px; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<section id="login">
+  <div class="card login-box">
+    <h1>🚗 Driver Safety App</h1>
+    <p>Secure access to your vehicle</p>
+    <input id="email" placeholder="Login ID" />
+    <input id="password" type="password" placeholder="Password" />
+    <button onclick="login()">Login</button>
+    <p id="loginError" class="red"></p>
+  </div>
+</section>
+
+<!-- ================= APP ================= -->
+<section id="app" class="hidden">
+
+  <header>
+    <strong>Driver Safety & Monitoring</strong>
+    <button class="secondary" onclick="goHome()">🏠 Home</button>
+  </header>
+
+  <div id="dashboard">
+
+    <!-- DRIVER MONITORING -->
+    <div class="card">
+      <h2>👤 Driver Monitoring</h2>
+      <video id="driverCam" autoplay muted playsinline></video>
+      <div class="row">
+        <span class="status">Driver: <span id="driverStatus" class="green">Alert</span></span>
+        <span class="status">Vehicle: <span id="vehicleStatus" class="green">Normal Speed</span></span>
+        <span id="alarmIcon" class="icon">🔕</span>
+      </div>
+      <div class="row">
+        <button class="secondary" onclick="toggleDriverCam()">Camera ON / OFF</button>
+      </div>
+      <p style="opacity:.8; font-size:14px;">If eyes closed continuously → speed reduces → vehicle stops</p>
+    </div>
+
+    <!-- VEHICLE FEATURES -->
+    <div class="card">
+      <h2>🛡️ Vehicle Security</h2>
+      <div class="row">
+        <button class="secondary" onclick="showView('car')">Car Status</button>
+        <button class="secondary" onclick="showView('map')">Car Location</button>
+        <button class="secondary" onclick="showView('inside')">Inside Camera</button>
+      </div>
+
+      <div id="view-car" class="car-box">🚗</div>
+
+      <div id="view-map" class="hidden">
+        <div class="car-box" style="font-size:16px;">📍 Offline Map View<br/>Car Tracked 🚗</div>
+      </div>
+
+      <div id="view-inside" class="hidden">
+        <video id="insideCam" autoplay muted playsinline></video>
+        <button class="secondary" onclick="toggleInsideCam()">Inside Cam ON / OFF</button>
+      </div>
+
+      <div class="row">
+        <button class="secondary" onclick="setState('alert')">Normal</button>
+        <button class="secondary" onclick="setState('drowsy')">Drowsy</button>
+        <button class="danger" onclick="setState('stop')">Stop</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ================= ALERT ================= -->
+<div id="overlay" class="overlay hidden">
+  <div class="popup">
+    <div id="popupIcon" class="big">🔔</div>
+    <h2 id="popupTitle">Alert</h2>
+    <p id="popupText"></p>
+    <button onclick="closePopup()">OK</button>
+  </div>
+</div>
+
+<script>
+  const LOGIN_ID = '123456@gmail.com';
+  const PASSWORD = '123456';
+
+  let driverStream=null, insideStream=null;
+  let audioCtx=null, osc=null;
+
+  function login(){
+    if(email.value===LOGIN_ID && password.value===PASSWORD){
+      document.getElementById('app').classList.remove('hidden');
+      document.getElementById('login').scrollIntoView({behavior:'smooth'});
+      setTimeout(()=>document.getElementById('login').classList.add('hidden'),300);
+    } else loginError.textContent='Invalid Login';
+  }
+
+  function goHome(){ setState('alert'); showView('car'); }
+
+  async function toggleDriverCam(){
+    if(!driverStream){ driverStream=await navigator.mediaDevices.getUserMedia({video:true}); driverCam.srcObject=driverStream; }
+    else{ driverStream.getTracks().forEach(t=>t.stop()); driverStream=null; driverCam.srcObject=null; }
+  }
+
+  async function toggleInsideCam(){
+    if(!insideStream){ insideStream=await navigator.mediaDevices.getUserMedia({video:true}); insideCam.srcObject=insideStream; }
+    else{ insideStream.getTracks().forEach(t=>t.stop()); insideStream=null; insideCam.srcObject=null; }
+  }
+
+  function showView(v){ ['car','map','inside'].forEach(x=>document.getElementById('view-'+x).classList.add('hidden')); document.getElementById('view-'+v).classList.remove('hidden'); }
+
+  function beep(){ stopBeep(); audioCtx=new (window.AudioContext||window.webkitAudioContext)(); osc=audioCtx.createOscillator(); osc.frequency.value=850; osc.connect(audioCtx.destination); osc.start(); }
+  function stopBeep(){ if(osc){ osc.stop(); osc=null; } }
+
+  function popup(icon,title,text){ popupIcon.textContent=icon; popupTitle.textContent=title; popupText.textContent=text; overlay.classList.remove('hidden'); }
+  function closePopup(){ overlay.classList.add('hidden'); stopBeep(); }
+
+  function setState(s){ stopBeep();
+    if(s==='alert'){ driverStatus.textContent='Alert'; driverStatus.className='green'; vehicleStatus.textContent='Normal Speed'; vehicleStatus.className='green'; alarmIcon.textContent='🔕'; }
+    if(s==='drowsy'){ driverStatus.textContent='Drowsy'; driverStatus.className='yellow'; vehicleStatus.textContent='Speed Reduced'; vehicleStatus.className='yellow'; alarmIcon.textContent='🔔'; beep(); popup('🔔','Drowsiness Detected','Vehicle speed reduced'); }
+    if(s==='stop'){ driverStatus.textContent='Unconscious'; driverStatus.className='red'; vehicleStatus.textContent='Vehicle Stopped'; vehicleStatus.className='red'; alarmIcon.textContent='🚗'; beep(); popup('🚗','Vehicle Stopped','Driver unresponsive'); }
+  }
+</script>
+</body>
+</html>
